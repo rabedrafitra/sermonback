@@ -16,6 +16,8 @@ model User {
   avatar        String?
   emailVerified DateTime?
   firstName     String?
+  address       String?      
+  phone         String?      
   accounts      Account[]
   comments      Comment[]
   likes         Like[]
@@ -105,6 +107,7 @@ model Preference {
 enum Role {
   USER
   ADMIN
+  SUPERUSER
 }
 
 enum PostType {

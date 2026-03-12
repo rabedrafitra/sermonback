@@ -7,24 +7,20 @@ datasource db {
 }
 
 model User {
-  id            String    @id @default(uuid())
-  email         String    @unique
-  emailVerified DateTime?
-  password      String?   // nullable → auth email / OAuth
+  id            String       @id @default(uuid())
+  email         String       @unique
+  password      String?
   name          String?
-  firstName     String?
+  role          Role         @default(USER)
+  createdAt     DateTime     @default(now())
   avatar        String?
-  role          Role      @default(USER)
-  createdAt     DateTime  @default(now())
-
-  // Relations métier
-  posts         Post[]
+  emailVerified DateTime?
+  firstName     String?
+  accounts      Account[]
   comments      Comment[]
   likes         Like[]
+  posts         Post[]
   preferences   Preference[]
-
-  // Relations NextAuth
-  accounts      Account[]
   sessions      Session[]
 }
 
@@ -41,8 +37,7 @@ model Account {
   scope             String?
   id_token          String?
   session_state     String?
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
 }
@@ -52,8 +47,7 @@ model Session {
   sessionToken String   @unique
   userId       String
   expires      DateTime
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model VerificationToken {
@@ -64,8 +58,6 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
-
-
 model Post {
   id        String    @id @default(uuid())
   title     String
@@ -75,53 +67,40 @@ model Post {
   duration  String?
   style     String
   entity    String
-
   authorId  String
-  author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
-
+  createdAt DateTime  @default(now())
   comments  Comment[]
   likes     Like[]
-
-  createdAt DateTime  @default(now())
+  author    User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
 }
-
 
 model Like {
   id     String @id @default(uuid())
-
   userId String
   postId String
-
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, postId])
 }
 
-
 model Comment {
   id        String   @id @default(uuid())
   content   String
-
   userId    String
   postId    String
-
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
-
   createdAt DateTime @default(now())
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
-
 
 model Preference {
   id     String @id @default(uuid())
   userId String
   key    String
   value  String
-
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
-
 
 enum Role {
   USER

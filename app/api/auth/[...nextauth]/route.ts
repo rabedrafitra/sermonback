@@ -1,39 +1,22 @@
-import NextAuth, { NextAuthOptions, Session, User } from "next-auth";
+import NextAuth, { NextAuthOptions, Session } from "next-auth";
 import { JWT } from "next-auth/jwt";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import EmailProvider from "next-auth/providers/email";
 import CredentialsProvider from "next-auth/providers/credentials";
+import GoogleProvider from "next-auth/providers/google";
 import bcrypt from "bcryptjs";
 import prisma from "../../../lib/prisma";
 
-// OPTIONS CORS
-export async function OPTIONS() {
-  return new Response(null, {
-    status: 204,
-    headers: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    },
-  });
-}
-
-// 🔹 TypeScript Role
 type Role = "user" | "admin";
 
-// 🔹 Mapper le rôle Prisma vers notre type Role TS
-const mapRole = (prismaRole: string | null | undefined): Role => {
-  if (prismaRole === "ADMIN") return "admin";
-  return "user"; // default
-};
+const mapRole = (prismaRole?: string | null): Role =>
+  prismaRole === "ADMIN" ? "admin" : "user";
 
-// 🔹 JWT personnalisé
 interface MyJWT extends JWT {
   userId: string;
   role: Role;
 }
 
-// 🔹 Session personnalisé
 interface MySession extends Omit<Session, "user"> {
   user: {
     id: string;
@@ -46,16 +29,13 @@ interface MySession extends Omit<Session, "user"> {
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
-
-  session: {
-    strategy: "jwt",
-  },
-
+  session: { strategy: "jwt" },
   providers: [
     EmailProvider({
       server: process.env.EMAIL_SERVER,
       from: process.env.EMAIL_FROM,
     }),
+
     CredentialsProvider({
       name: "Credentials",
       credentials: {
@@ -64,63 +44,51 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials.password) return null;
-
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
-        });
-
+        const user = await prisma.user.findUnique({ where: { email: credentials.email } });
         if (!user || !user.password) return null;
-
         const valid = await bcrypt.compare(credentials.password, user.password);
         if (!valid) return null;
-
         return user;
       },
     }),
+
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      authorization: { params: { prompt: "consent", access_type: "offline", response_type: "code" } },
+    }),
   ],
 
-  jwt: {
-    secret: process.env.JWT_SECRET,
-  },
+  jwt: { secret: process.env.JWT_SECRET },
 
   callbacks: {
-    // 🔹 Ajouter userId et role dans le token JWT
     async jwt({ token, user }) {
       const t = token as MyJWT;
       if (user) {
         t.userId = user.id;
-        t.role = mapRole((user as any).role); // map rôle Prisma vers Role TS
+        t.role = mapRole((user as any).role);
       }
       return t;
     },
 
-    // 🔹 Fournir userId et role au front via session
     async session({ session, token }) {
       const t = token as MyJWT;
-
-      // Créer une session complète et safe
-      const mySession: MySession = {
+      return {
         ...session,
-        user: {
-          id: t.userId,
-          role: t.role,
-          name: session.user?.name ?? null,
-          email: session.user?.email ?? null,
-          image: session.user?.image ?? null,
-        },
-      };
+        user: { id: t.userId, role: t.role, name: session.user?.name ?? null, email: session.user?.email ?? null, image: session.user?.image ?? null },
+      } as MySession;
+    },
 
-      return mySession;
+    async redirect({ url, baseUrl }) {
+      if (url.startsWith("sermonapp://")) return url; // ✅ autoriser deep link mobile
+      if (url.startsWith(baseUrl)) return url;       // ✅ autoriser URLs internes NextAuth
+      return baseUrl;                                // ❌ bloquer le reste
     },
   },
 
-  pages: {
-    signIn: "/auth/login",
-  },
-
+  pages: { signIn: "/auth/login" },
   debug: process.env.NODE_ENV === "development",
 };
 
 const handler = NextAuth(authOptions);
-
 export { handler as GET, handler as POST };
